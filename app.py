@@ -119,20 +119,28 @@ if uploaded_file:
     for p in rimanenti:
         info_p = df.loc[df["NomeCompleto"] == p].iloc[0]
         fascia_p, sesso_p = info_p["Fascia"], info_p["Sesso"]
-        candidate = sorted(
-            tavoli,
-            key=lambda t: (
-                sum(df[df["NomeCompleto"].isin(t["persone"])]["Fascia"] == fascia_p),
-                abs(
-                    Counter(df[df["NomeCompleto"].isin(t["persone"])]["Sesso"])["M"] -
-                    Counter(df[df["NomeCompleto"].isin(t["persone"])]["Sesso"])["F"]
-                )
+
+        def score(t):
+            persone = t["persone"]
+            sessi = df[df["NomeCompleto"].isin(persone)]["Sesso"].tolist()
+            maschi = sessi.count("M")
+            femmine = sessi.count("F")
+            if sesso_p == "M":
+                sbilanciamento = maschi
+            else:
+                sbilanciamento = femmine
+            return (
+                sbilanciamento,
+                abs(maschi - femmine)
             )
+
+        candidate = sorted(
+            [t for t in tavoli if len(t["persone"]) < t["lim"]],
+            key=score
         )
-        for t in candidate:
-            if len(t["persone"]) < t["lim"]:
-                t["persone"].append(p)
-                break
+
+        if candidate:
+            candidate[0]["persone"].append(p)
 
     rows = []
     for i, t in enumerate(tavoli, start=1):
@@ -152,7 +160,6 @@ if uploaded_file:
 
     st.dataframe(df_result)
 
-    # ✅ Esporta Excel correttamente (fix error)
     output = io.BytesIO()
     df_result.to_excel(output, index=False, engine="openpyxl")
     output.seek(0)
