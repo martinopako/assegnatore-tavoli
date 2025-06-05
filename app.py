@@ -26,7 +26,7 @@ def check_password():
 if not check_password():
     st.stop()
 
-# Logo e titolo
+# --- LOGO e titolo ---
 st.image("logo_netleg.png", width=150)
 st.title("🎯 Assegnatore Tavoli Bilanciati – Netleg")
 
@@ -119,29 +119,51 @@ if uploaded_file:
     for p in rimanenti:
         info_p = df.loc[df["NomeCompleto"] == p].iloc[0]
         fascia_p, sesso_p = info_p["Fascia"], info_p["Sesso"]
-
-        def score(t):
-            persone = t["persone"]
-            sessi = df[df["NomeCompleto"].isin(persone)]["Sesso"].tolist()
-            maschi = sessi.count("M")
-            femmine = sessi.count("F")
-            if sesso_p == "M":
-                sbilanciamento = maschi
-            else:
-                sbilanciamento = femmine
-            return (
-                sbilanciamento,
-                abs(maschi - femmine)
-            )
-
         candidate = sorted(
-            [t for t in tavoli if len(t["persone"]) < t["lim"]],
-            key=score
+            tavoli,
+            key=lambda t: (
+                sum(df[df["NomeCompleto"].isin(t["persone"])]["Fascia"] == fascia_p),
+                abs(
+                    Counter(df[df["NomeCompleto"].isin(t["persone"])]["Sesso"])["M"] -
+                    Counter(df[df["NomeCompleto"].isin(t["persone"])]["Sesso"])["F"]
+                )
+            )
         )
+        for t in candidate:
+            if len(t["persone"]) < t["lim"]:
+                t["persone"].append(p)
+                break
 
-        if candidate:
-            candidate[0]["persone"].append(p)
+    # --- NUOVO BILANCIAMENTO UOMO/DONNA ---
+    sesso_map = {row["NomeCompleto"]: row["Sesso"] for _, row in df.iterrows()}
+    total_m = sum(s == "M" for s in sesso_map.values())
+    total_f = sum(s == "F" for s in sesso_map.values())
+    num_tavoli = len(tavoli)
 
+    ideal_m = [total_m // num_tavoli + (1 if i < total_m % num_tavoli else 0) for i in range(num_tavoli)]
+    ideal_f = [total_f // num_tavoli + (1 if i < total_f % num_tavoli else 0) for i in range(num_tavoli)]
+
+    for i, t in enumerate(tavoli):
+        while Counter(sesso_map[p] for p in t["persone"])["M"] > ideal_m[i]:
+            for p in t["persone"]:
+                if sesso_map[p] == "M":
+                    for j, t2 in enumerate(tavoli):
+                        if i != j and len(t2["persone"]) < t2["lim"] and Counter(sesso_map[q] for q in t2["persone"])["M"] < ideal_m[j]:
+                            t["persone"].remove(p)
+                            t2["persone"].append(p)
+                            break
+                    break
+        while Counter(sesso_map[p] for p in t["persone"])["F"] > ideal_f[i]:
+            for p in t["persone"]:
+                if sesso_map[p] == "F":
+                    for j, t2 in enumerate(tavoli):
+                        if i != j and len(t2["persone"]) < t2["lim"] and Counter(sesso_map[q] for q in t2["persone"])["F"] < ideal_f[j]:
+                            t["persone"].remove(p)
+                            t2["persone"].append(p)
+                            break
+                    break
+
+    # --- Generazione risultato finale ---
     rows = []
     for i, t in enumerate(tavoli, start=1):
         for persona in t["persone"]:
