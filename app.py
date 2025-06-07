@@ -137,3 +137,54 @@ if uploaded_file and not st.session_state["assegnamento_confermato"]:
 
     if soglia_effettiva > soglia_max:
         st.warning(f"⚠️ È stata applicata una soglia forzata di ±{soglia_effettiva} per completare l'assegnazione.")
+
+    # Costruisci risultato finale
+    rows = []
+    for i, t in enumerate(best_tavoli, start=1):
+        for persona in t["persone"]:
+            info = df[df["NomeCompleto"] == persona].iloc[0]
+            rows.append({
+                "Tavolo":      i,
+                "Nome":        info["Nome"],
+                "Cognome":     info["Cognome"],
+                "Fascia":      info["Fascia"],
+                "Sesso":       info["Sesso"],
+                "Preferenze":  info["Preferenze"]
+            })
+
+    df_result = pd.DataFrame(rows)
+    st.session_state["df_result"] = df_result
+    st.session_state["preferenze_errate"] = preferenze_errate
+    st.session_state["assegnamento_confermato"] = True
+
+if "df_result" in st.session_state:
+    st.success("✅ Tavoli assegnati con successo!")
+    st.dataframe(st.session_state["df_result"])
+
+    output = io.BytesIO()
+    st.session_state["df_result"].to_excel(output, index=False, engine="openpyxl")
+    output.seek(0)
+
+    if st.download_button(
+        "📥 Scarica risultato in Excel",
+        data=output,
+        file_name="tavoli_assegnati_finale.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    ):
+        st.success("🎉 File scaricato. Per ricalcolare, ricarica un nuovo file.")
+        st.session_state["assegnamento_confermato"] = False
+
+    st.subheader("📊 Riepilogo per Tavolo (Sesso & Età Media)")
+    df_r = st.session_state["df_result"].copy()
+    df_r["EtàMediaStimata"] = df_r["Fascia"].map(lambda f: {"25-34": 29.5, "35-44": 39.5, "45-54": 49.5}.get(f, 39.5))
+    riepilogo = df_r.groupby("Tavolo").agg(
+        Maschi=("Sesso", lambda x: sum(x == "Maschio")),
+        Femmine=("Sesso", lambda x: sum(x == "Femmina")),
+        EtaMedia=("EtàMediaStimata", "mean"),
+        Totale=("Sesso", "count")
+    ).reset_index()
+    st.dataframe(riepilogo)
+
+    if st.session_state["preferenze_errate"]:
+        st.warning("⚠️ Nomi nelle preferenze non trovati:")
+        st.dataframe(pd.DataFrame(st.session_state["preferenze_errate"], columns=["Chi ha scritto", "Nome non valido"]))
