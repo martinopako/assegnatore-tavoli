@@ -9,7 +9,7 @@ import io
 # --- LOGIN ---
 def check_password():
     def password_entered():
-        if st.session_state["password"] == "Netleg123":
+        if st.session_state.get("password") == "Netleg123":
             st.session_state["password_correct"] = True
         else:
             st.session_state["password_correct"] = False
@@ -43,18 +43,21 @@ if "assegnamento_confermato" not in st.session_state:
 
 if uploaded_file and not st.session_state["assegnamento_confermato"]:
     try:
-    df = pd.read_excel(uploaded_file)
-    st.write("✅ File caricato correttamente. Anteprima:")
-    st.write(df.head())
-except Exception as e:
-    st.error(f"❌ Errore durante la lettura del file Excel: {e}")
-    st.stop()
-
-expected_cols = ["Nome", "Cognome", "Sesso", "Fascia", "Preferenze"]
-missing_cols = [col for col in expected_cols if col not in df.columns]
-        st.error(f"Colonne mancanti nel file: {missing_cols}")
+        df = pd.read_excel(uploaded_file)
+        st.write("✅ File caricato correttamente. Anteprima:")
+        st.write(df.head())
+    except Exception as e:
+        st.error(f"❌ Errore durante la lettura del file Excel: {e}")
         st.stop()
 
+    expected_cols = ["Nome", "Cognome", "Sesso", "Fascia", "Preferenze"]
+    missing_cols = [col for col in expected_cols if col not in df.columns]
+    if missing_cols:
+        st.error(f"❌ Colonne mancanti nel file: {missing_cols}")
+        st.stop()
+
+    df = df[expected_cols].copy()
+    df.dropna(subset=["Nome", "Cognome", "Sesso"], inplace=True)
     df["NomeCompleto"] = df["Nome"].astype(str).str.strip() + " " + df["Cognome"].astype(str).str.strip()
     df["Preferenze"] = df["Preferenze"].fillna("").astype(str).str.strip()
     df["Fascia"] = df["Fascia"].fillna("").astype(str).str.strip()
