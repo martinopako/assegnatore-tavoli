@@ -122,6 +122,35 @@ if uploaded_file and not st.session_state["assegnamento_confermato"]:
                         t["persone"].append(p)
                         assegnati.add(p)
                         break
+
+        # Bilanciamento post-assegnazione tra tavoli
+        def conta_sessi(t):
+            persone = df[df["NomeCompleto"].isin(t["persone"])]
+            m = sum(persone["Sesso"] == "Maschio")
+            f = sum(persone["Sesso"] == "Femmina")
+            return m, f
+
+        for i in range(len(tavoli)):
+            for j in range(i + 1, len(tavoli)):
+                t1, t2 = tavoli[i], tavoli[j]
+                m1, f1 = conta_sessi(t1)
+                m2, f2 = conta_sessi(t2)
+                squilibrio1 = abs(m1 - f1)
+                squilibrio2 = abs(m2 - f2)
+                if squilibrio1 > soglia or squilibrio2 > soglia:
+                    for p1 in t1["persone"]:
+                        sesso1 = df[df["NomeCompleto"] == p1]["Sesso"].values[0]
+                        for p2 in t2["persone"]:
+                            sesso2 = df[df["NomeCompleto"] == p2]["Sesso"].values[0]
+                            if sesso1 != sesso2:
+                                t1["persone"].remove(p1)
+                                t2["persone"].remove(p2)
+                                t1["persone"].append(p2)
+                                t2["persone"].append(p1)
+                                break
+                        else:
+                            continue
+                        break
         return len(assegnati) == len(partecipanti), tavoli
 
     best_config = None
