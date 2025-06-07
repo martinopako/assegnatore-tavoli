@@ -33,7 +33,7 @@ st.title("🎯 Assegnatore Tavoli Bilanciati – Netleg")
 soglia_flessibile = st.checkbox("Consenti bilanciamento sesso ±2 per ridurre il numero di tavoli", value=False)
 soglia_max = 2 if soglia_flessibile else 1
 soglia_riserva = 3
-soglia_fine = 100  # forza estrema finale
+soglia_fine = 100
 soglia_effettiva = soglia_max
 
 uploaded_file = st.file_uploader("📁 Carica il file partecipanti", type=["xlsx"])
@@ -86,9 +86,6 @@ if uploaded_file and not st.session_state["assegnamento_confermato"]:
             dfs(p, gruppo)
             gruppi.append(gruppo)
 
-    def eta_media(fascia):
-        return {"25-34": 29.5, "35-44": 39.5, "45-54": 49.5}.get(fascia, 39.5)
-
     def sesso_gruppo(gruppo):
         sessi = df[df["NomeCompleto"].isin(gruppo)]["Sesso"].value_counts()
         return sessi.get("Maschio", 0), sessi.get("Femmina", 0)
@@ -123,34 +120,37 @@ if uploaded_file and not st.session_state["assegnamento_confermato"]:
                         assegnati.add(p)
                         break
 
-        # Bilanciamento post-assegnazione tra tavoli
         def conta_sessi(t):
             persone = df[df["NomeCompleto"].isin(t["persone"])]
             m = sum(persone["Sesso"] == "Maschio")
             f = sum(persone["Sesso"] == "Femmina")
             return m, f
 
-        for i in range(len(tavoli)):
-            for j in range(i + 1, len(tavoli)):
-                t1, t2 = tavoli[i], tavoli[j]
-                m1, f1 = conta_sessi(t1)
-                m2, f2 = conta_sessi(t2)
-                squilibrio1 = abs(m1 - f1)
-                squilibrio2 = abs(m2 - f2)
-                if squilibrio1 > soglia or squilibrio2 > soglia:
+        migliorato = True
+        while migliorato:
+            migliorato = False
+            for i in range(len(tavoli)):
+                for j in range(i + 1, len(tavoli)):
+                    t1, t2 = tavoli[i], tavoli[j]
+                    m1, f1 = conta_sessi(t1)
+                    m2, f2 = conta_sessi(t2)
                     for p1 in t1["persone"]:
-                        sesso1 = df[df["NomeCompleto"] == p1]["Sesso"].values[0]
+                        s1 = df[df["NomeCompleto"] == p1]["Sesso"].values[0]
                         for p2 in t2["persone"]:
-                            sesso2 = df[df["NomeCompleto"] == p2]["Sesso"].values[0]
-                            if sesso1 != sesso2:
+                            s2 = df[df["NomeCompleto"] == p2]["Sesso"].values[0]
+                            if s1 != s2:
                                 t1["persone"].remove(p1)
                                 t2["persone"].remove(p2)
                                 t1["persone"].append(p2)
                                 t2["persone"].append(p1)
+                                migliorato = True
                                 break
-                        else:
-                            continue
+                        if migliorato:
+                            break
+                    if migliorato:
                         break
+                if migliorato:
+                    break
         return len(assegnati) == len(partecipanti), tavoli
 
     best_config = None
@@ -175,7 +175,6 @@ if uploaded_file and not st.session_state["assegnamento_confermato"]:
     if soglia_effettiva > soglia_max:
         st.warning(f"⚠️ È stata applicata una soglia forzata di ±{soglia_effettiva} per completare l'assegnazione.")
 
-    # Costruisci risultato finale
     rows = []
     for i, t in enumerate(best_tavoli, start=1):
         for persona in t["persone"]:
