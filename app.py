@@ -1,4 +1,4 @@
-# --- Assegnatore Tavoli Bilanciati con Streamlit (Bilanciamento sesso ±1 o ±2 con fallback ±3) ---
+# --- Assegnatore Tavoli Bilanciati con Streamlit (Bilanciamento sesso ±1 o ±2 con fallback ±3 e forzatura finale) ---
 import streamlit as st
 import pandas as pd
 import random
@@ -33,6 +33,7 @@ st.title("🎯 Assegnatore Tavoli Bilanciati – Netleg")
 soglia_flessibile = st.checkbox("Consenti bilanciamento sesso ±2 per ridurre il numero di tavoli", value=False)
 soglia_max = 2 if soglia_flessibile else 1
 soglia_riserva = 3
+soglia_fine = 100  # forza estrema finale
 soglia_effettiva = soglia_max
 
 uploaded_file = st.file_uploader("📁 Carica il file partecipanti.xlsx", type=["xlsx"])
@@ -119,7 +120,7 @@ if uploaded_file and not st.session_state["assegnamento_confermato"]:
     best_tavoli = None
 
     configs = tavoli_bilanciati(len(partecipanti))
-    for soglia_corrente in [soglia_max, soglia_riserva]:
+    for soglia_corrente in [soglia_max, soglia_riserva, soglia_fine]:
         for config in configs:
             ok, tavoli = prova_configurazione(config, soglia_corrente)
             if ok:
@@ -131,8 +132,8 @@ if uploaded_file and not st.session_state["assegnamento_confermato"]:
             break
 
     if not best_tavoli:
-        st.error("❌ Impossibile distribuire i partecipanti rispettando i vincoli. Prova a rilassare la soglia.")
+        st.error("❌ Impossibile distribuire i partecipanti in nessuna configurazione.")
         st.stop()
 
     if soglia_effettiva > soglia_max:
-        st.warning(f"⚠️ È stata applicata una soglia temporanea di ±{soglia_effettiva} per completare l'assegnazione.")
+        st.warning(f"⚠️ È stata applicata una soglia forzata di ±{soglia_effettiva} per completare l'assegnazione.")
