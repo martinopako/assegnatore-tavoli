@@ -1,4 +1,4 @@
-# --- Assegnatore Tavoli Bilanciati con Streamlit (Versione finale con bilanciamento sesso ±1) ---
+# --- Assegnatore Tavoli Bilanciati con Streamlit (Versione finale con bilanciamento sesso ±1 o ±2) ---
 import streamlit as st
 import pandas as pd
 import random
@@ -30,6 +30,10 @@ if not check_password():
 st.image("logo_netleg.png", width=150)
 st.title("\U0001f3af Assegnatore Tavoli Bilanciati – Netleg")
 
+# Checkbox per soglia di bilanciamento sesso
+soglia_flessibile = st.checkbox("Consenti bilanciamento sesso ±2 per ridurre il numero di tavoli", value=False)
+soglia_max = 2 if soglia_flessibile else 1
+
 uploaded_file = st.file_uploader("\U0001f4c1 Carica il file partecipanti.xlsx", type=["xlsx"])
 
 if "assegnamento_confermato" not in st.session_state:
@@ -43,7 +47,7 @@ if uploaded_file and not st.session_state["assegnamento_confermato"]:
     df["Sesso"] = df["Sesso"].fillna("").str.capitalize()
 
     partecipanti = df["NomeCompleto"].tolist()
-    random.seed(42)  # fisso per evitare risultati diversi ad ogni run
+    random.seed(42)
     nomi_validi = set(df["NomeCompleto"])
 
     preferenze_dict = defaultdict(set)
@@ -111,7 +115,7 @@ if uploaded_file and not st.session_state["assegnamento_confermato"]:
         femmine_tavolo = sum(persone_tavolo["Sesso"] == "Femmina")
         maschi_tot = maschi_tavolo + maschi_gruppo
         femmine_tot = femmine_tavolo + femmine_gruppo
-        return abs(maschi_tot - femmine_tot) <= 1 and len(tavolo["persone"]) + len(gruppo) <= tavolo["lim"]
+        return abs(maschi_tot - femmine_tot) <= soglia_max and len(tavolo["persone"]) + len(gruppo) <= tavolo["lim"]
 
     gruppi.sort(key=lambda g: -len(g))
 
