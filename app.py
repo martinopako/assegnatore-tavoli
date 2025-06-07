@@ -1,9 +1,9 @@
-# --- Assegnatore Tavoli Bilanciati con Streamlit (Versione finale con bilanciamento sesso ±1 o ±2) ---
+# --- Assegnatore Tavoli Bilanciati con Streamlit (Bilanciamento sesso ±1 o ±2 con simulazione tavoli) ---
 import streamlit as st
 import pandas as pd
 import random
 from collections import defaultdict, Counter
-from itertools import combinations_with_replacement
+from itertools import combinations_with_replacement, permutations
 import io
 
 # --- LOGIN ---
@@ -47,7 +47,6 @@ if uploaded_file and not st.session_state["assegnamento_confermato"]:
     df["Sesso"] = df["Sesso"].fillna("").str.capitalize()
 
     partecipanti = df["NomeCompleto"].tolist()
-    random.seed(42)
     nomi_validi = set(df["NomeCompleto"])
 
     preferenze_dict = defaultdict(set)
@@ -79,28 +78,6 @@ if uploaded_file and not st.session_state["assegnamento_confermato"]:
             dfs(p, gruppo)
             gruppi.append(gruppo)
 
-    def tavoli_bilanciati(n, min_size=6, max_size=8):
-        migliori = []
-        for num_tavoli in range(1, n // min_size + 2):
-            for combo in combinations_with_replacement(range(min_size, max_size + 1), num_tavoli):
-                if sum(combo) == n:
-                    diff = max(combo) - min(combo)
-                    if not migliori or (
-                        len(combo) < len(migliori[0]) or
-                        (len(combo) == len(migliori[0]) and diff < (max(migliori[0]) - min(migliori[0])))
-                    ):
-                        migliori = [list(combo)]
-                    elif (
-                        len(combo) == len(migliori[0]) and
-                        diff == (max(migliori[0]) - min(migliori[0]))
-                    ):
-                        migliori.append(list(combo))
-        return sorted(migliori[0]) if migliori else [n]
-
-    capienze = tavoli_bilanciati(len(partecipanti))
-    tavoli = [{"lim": cap, "persone": []} for cap in capienze]
-    assegnati = set()
-
     def eta_media(fascia):
         return {"25-34": 29.5, "35-44": 39.5, "45-54": 49.5}.get(fascia, 39.5)
 
@@ -108,63 +85,52 @@ if uploaded_file and not st.session_state["assegnamento_confermato"]:
         sessi = df[df["NomeCompleto"].isin(gruppo)]["Sesso"].value_counts()
         return sessi.get("Maschio", 0), sessi.get("Femmina", 0)
 
-    def inseribile(tavolo, gruppo):
-        maschi_gruppo, femmine_gruppo = sesso_gruppo(gruppo)
+    def inseribile(tavolo, gruppo, soglia):
+        maschi_g, femmine_g = sesso_gruppo(gruppo)
         persone_tavolo = df[df["NomeCompleto"].isin(tavolo["persone"])]
-        maschi_tavolo = sum(persone_tavolo["Sesso"] == "Maschio")
-        femmine_tavolo = sum(persone_tavolo["Sesso"] == "Femmina")
-        maschi_tot = maschi_tavolo + maschi_gruppo
-        femmine_tot = femmine_tavolo + femmine_gruppo
-        return abs(maschi_tot - femmine_tot) <= soglia_max and len(tavolo["persone"]) + len(gruppo) <= tavolo["lim"]
+        maschi_t = sum(persone_tavolo["Sesso"] == "Maschio")
+        femmine_t = sum(persone_tavolo["Sesso"] == "Femmina")
+        return abs((maschi_t + maschi_g) - (femmine_t + femmine_g)) <= soglia and len(tavolo["persone"]) + len(gruppo) <= tavolo["lim"]
 
-    gruppi.sort(key=lambda g: -len(g))
+    def tavoli_bilanciati(n, min_size=6, max_size=8):
+        configs = []
+        for num_tavoli in range(1, n // min_size + 2):
+            for combo in combinations_with_replacement(range(min_size, max_size + 1), num_tavoli):
+                if sum(combo) == n:
+                    configs.append(sorted(list(combo)))
+        return sorted(configs, key=lambda x: (len(x), max(x)-min(x)))
 
-    for gruppo in gruppi:
-        non_assegnati = [p for p in gruppo if p not in assegnati]
-        if not non_assegnati:
-            continue
-        random.shuffle(non_assegnati)
-        for p in non_assegnati:
-            inserted = False
-            for t in sorted(tavoli, key=lambda x: len(x["persone"])):
-                if inseribile(t, [p]):
-                    t["persone"].append(p)
-                    assegnati.add(p)
-                    inserted = True
-                    break
-            if not inserted:
-                st.warning(f"Nessun tavolo adatto per {p}")
+    def prova_configurazione(config, soglia):
+        tavoli = [{"lim": cap, "persone": []} for cap in config]
+        assegnati = set()
+        for gruppo in sorted(gruppi, key=lambda g: -len(g)):
+            for p in gruppo:
+                if p in assegnati:
+                    continue
+                for t in sorted(tavoli, key=lambda x: len(x["persone"])):
+                    if inseribile(t, [p], soglia):
+                        t["persone"].append(p)
+                        assegnati.add(p)
+                        break
+        return len(assegnati) == len(partecipanti), tavoli
 
-    rimanenti = [p for p in partecipanti if p not in assegnati]
-    random.shuffle(rimanenti)
+    best_config = None
+    best_tavoli = None
+    for config in tavoli_bilanciati(len(partecipanti)):
+        ok, tavoli = prova_configurazione(config, soglia_max)
+        if ok:
+            best_config = config
+            best_tavoli = tavoli
+            break
 
-    for p in rimanenti:
-        info_p = df.loc[df["NomeCompleto"] == p].iloc[0]
-        sesso_p = info_p["Sesso"]
-        eta_p = eta_media(info_p["Fascia"])
-
-        candidate = sorted(
-            tavoli,
-            key=lambda t: (
-                abs(Counter(df[df["NomeCompleto"].isin(t["persone"])]["Sesso"])['Maschio'] -
-                    Counter(df[df["NomeCompleto"].isin(t["persone"])]["Sesso"])['Femmina']),
-                abs(
-                    eta_p - df[df["NomeCompleto"].isin(t["persone"])]["Fascia"].map(eta_media).mean()
-                    if t["persone"] else 0
-                ),
-                len(t["persone"])
-            )
-        )
-        for t in candidate:
-            if inseribile(t, [p]):
-                t["persone"].append(p)
-                assegnati.add(p)
-                break
+    if not best_tavoli:
+        st.error("❌ Impossibile distribuire i partecipanti rispettando i vincoli. Prova a rilassare la soglia.")
+        st.stop()
 
     rows = []
-    for i, t in enumerate(tavoli, start=1):
+    for i, t in enumerate(best_tavoli, start=1):
         for persona in t["persone"]:
-            info = df.loc[df["NomeCompleto"] == persona].iloc[0]
+            info = df[df["NomeCompleto"] == persona].iloc[0]
             rows.append({
                 "Tavolo":      i,
                 "Nome":        info["Nome"],
