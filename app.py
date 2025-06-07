@@ -1,4 +1,4 @@
-# --- Assegnatore Tavoli Bilanciati con Streamlit ---
+# --- Assegnatore Tavoli Bilanciati con Streamlit (Versione finale con bilanciamento sesso ±1) ---
 import streamlit as st
 import pandas as pd
 import random
@@ -27,7 +27,6 @@ def check_password():
 if not check_password():
     st.stop()
 
-# Logo e titolo
 st.image("logo_netleg.png", width=150)
 st.title("\U0001f3af Assegnatore Tavoli Bilanciati – Netleg")
 
@@ -44,8 +43,7 @@ if uploaded_file and not st.session_state["assegnamento_confermato"]:
     df["Sesso"] = df["Sesso"].fillna("").str.capitalize()
 
     partecipanti = df["NomeCompleto"].tolist()
-    random.seed(42)  # fissato per evitare risultati diversi
-    random.shuffle(partecipanti)
+    random.seed(42)  # fisso per evitare risultati diversi ad ogni run
     nomi_validi = set(df["NomeCompleto"])
 
     preferenze_dict = defaultdict(set)
@@ -60,7 +58,6 @@ if uploaded_file and not st.session_state["assegnamento_confermato"]:
             else:
                 preferenze_dict[nome].add(pref)
 
-    # Unione transitiva delle preferenze unidirezionali
     gruppi = []
     visitati = set()
 
@@ -78,7 +75,6 @@ if uploaded_file and not st.session_state["assegnamento_confermato"]:
             dfs(p, gruppo)
             gruppi.append(gruppo)
 
-    # Calcolo tavoli bilanciati
     def tavoli_bilanciati(n, min_size=6, max_size=8):
         migliori = []
         for num_tavoli in range(1, n // min_size + 2):
@@ -104,25 +100,39 @@ if uploaded_file and not st.session_state["assegnamento_confermato"]:
     def eta_media(fascia):
         return {"25-34": 29.5, "35-44": 39.5, "45-54": 49.5}.get(fascia, 39.5)
 
-    gruppi.sort(key=lambda g: -len(g))
-    for gruppo in gruppi:
-        gruppo = list(gruppo)
-        if all(p in assegnati for p in gruppo):
-            continue
-        candidati = sorted(
-            [t for t in tavoli if len(t["persone"]) + len(gruppo) <= t["lim"]],
-            key=lambda t: (
-                abs(Counter(df[df["NomeCompleto"].isin(t["persone"])]["Sesso"])['Maschio'] -
-                    Counter(df[df["NomeCompleto"].isin(t["persone"])]["Sesso"])['Femmina']),
-                len(t["persone"])
-            )
-        )
-        if candidati:
-            candidati[0]["persone"].extend(gruppo)
-            assegnati.update(gruppo)
+    def sesso_gruppo(gruppo):
+        sessi = df[df["NomeCompleto"].isin(gruppo)]["Sesso"].value_counts()
+        return sessi.get("Maschio", 0), sessi.get("Femmina", 0)
 
-    # Rimanenti partecipanti
+    def inseribile(tavolo, gruppo):
+        maschi_gruppo, femmine_gruppo = sesso_gruppo(gruppo)
+        persone_tavolo = df[df["NomeCompleto"].isin(tavolo["persone"])]
+        maschi_tavolo = sum(persone_tavolo["Sesso"] == "Maschio")
+        femmine_tavolo = sum(persone_tavolo["Sesso"] == "Femmina")
+        maschi_tot = maschi_tavolo + maschi_gruppo
+        femmine_tot = femmine_tavolo + femmine_gruppo
+        return abs(maschi_tot - femmine_tot) <= 1 and len(tavolo["persone"]) + len(gruppo) <= tavolo["lim"]
+
+    gruppi.sort(key=lambda g: -len(g))
+
+    for gruppo in gruppi:
+        non_assegnati = [p for p in gruppo if p not in assegnati]
+        if not non_assegnati:
+            continue
+        random.shuffle(non_assegnati)
+        for p in non_assegnati:
+            inserted = False
+            for t in sorted(tavoli, key=lambda x: len(x["persone"])):
+                if inseribile(t, [p]):
+                    t["persone"].append(p)
+                    assegnati.add(p)
+                    inserted = True
+                    break
+            if not inserted:
+                st.warning(f"Nessun tavolo adatto per {p}")
+
     rimanenti = [p for p in partecipanti if p not in assegnati]
+    random.shuffle(rimanenti)
 
     for p in rimanenti:
         info_p = df.loc[df["NomeCompleto"] == p].iloc[0]
@@ -142,7 +152,7 @@ if uploaded_file and not st.session_state["assegnamento_confermato"]:
             )
         )
         for t in candidate:
-            if len(t["persone"]) < t["lim"]:
+            if inseribile(t, [p]):
                 t["persone"].append(p)
                 assegnati.add(p)
                 break
@@ -165,7 +175,6 @@ if uploaded_file and not st.session_state["assegnamento_confermato"]:
     st.session_state["preferenze_errate"] = preferenze_errate
     st.session_state["assegnamento_confermato"] = True
 
-# Visualizza risultati solo se disponibili
 if "df_result" in st.session_state:
     st.success("\u2705 Tavoli assegnati con successo!")
     st.dataframe(st.session_state["df_result"])
