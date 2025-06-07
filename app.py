@@ -94,13 +94,13 @@ if uploaded_file and not st.session_state["assegnamento_confermato"]:
         femmine_t = sum(persone_tavolo["Sesso"] == "Femmina")
         return abs((maschi_t + maschi_g) - (femmine_t + femmine_g)) <= soglia and len(tavolo["persone"]) + len(gruppo) <= tavolo["lim"]
 
-   def tavoli_bilanciati(n, max_size=8):
-    configs = []
-    for num_tavoli in range(1, n + 1):
-        for combo in combinations_with_replacement(range(1, max_size + 1), num_tavoli):
-            if sum(combo) == n and all(1 <= x <= max_size for x in combo):
-                configs.append(sorted(list(combo)))
-    return sorted(configs, key=lambda x: (len(x), max(x) - min(x)))
+    def tavoli_bilanciati(n, max_size=8):
+        configs = []
+        for num_tavoli in range(1, n + 1):
+            for combo in combinations_with_replacement(range(1, max_size + 1), num_tavoli):
+                if sum(combo) == n and all(1 <= x <= max_size for x in combo):
+                    configs.append(sorted(list(combo)))
+        return sorted(configs, key=lambda x: (len(x), max(x) - min(x)))
 
     def prova_configurazione(config, soglia):
         tavoli = [{"lim": cap, "persone": []} for cap in config]
@@ -166,7 +166,7 @@ if "df_result" in st.session_state:
     output.seek(0)
 
     if st.download_button(
-        "📥 Scarica risultato in Excel",
+        "📅 Scarica risultato in Excel",
         data=output,
         file_name="tavoli_assegnati_finale.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
