@@ -94,13 +94,13 @@ if uploaded_file and not st.session_state["assegnamento_confermato"]:
         femmine_t = sum(persone_tavolo["Sesso"] == "Femmina")
         return abs((maschi_t + maschi_g) - (femmine_t + femmine_g)) <= soglia and len(tavolo["persone"]) + len(gruppo) <= tavolo["lim"]
 
-    def tavoli_bilanciati(n, min_size=6, max_size=8):
-        configs = []
-        for num_tavoli in range(1, n // min_size + 2):
-            for combo in combinations_with_replacement(range(min_size, max_size + 1), num_tavoli):
-                if sum(combo) == n:
-                    configs.append(sorted(list(combo)))
-        return sorted(configs, key=lambda x: (len(x), max(x)-min(x)))
+    def tavoli_bilanciati(n, max_size=8):
+    configs = []
+    for num_tavoli in range(1, n + 1):
+        for combo in combinations_with_replacement(range(1, max_size + 1), num_tavoli):
+            if sum(combo) == n and all(x <= max_size for x in combo):
+                configs.append(sorted(list(combo)))
+    return sorted(configs, key=lambda x: (len(x), max(x)-min(x)))
 
     def prova_configurazione(config, soglia):
         tavoli = [{"lim": cap, "persone": []} for cap in config]
