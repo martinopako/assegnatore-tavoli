@@ -36,17 +36,23 @@ soglia_riserva = 3
 soglia_fine = 100  # forza estrema finale
 soglia_effettiva = soglia_max
 
-uploaded_file = st.file_uploader("📁 Carica il file partecipanti.xlsx", type=["xlsx"])
+uploaded_file = st.file_uploader("📁 Carica il file partecipanti", type=["xlsx"])
 
 if "assegnamento_confermato" not in st.session_state:
     st.session_state["assegnamento_confermato"] = False
 
 if uploaded_file and not st.session_state["assegnamento_confermato"]:
     df = pd.read_excel(uploaded_file)
-    df["NomeCompleto"] = df["Nome"].str.strip() + " " + df["Cognome"].str.strip()
-    df["Preferenze"] = df["Preferenze"].fillna("").str.strip()
-    df["Fascia"] = df["Fascia"].fillna("").str.strip()
-    df["Sesso"] = df["Sesso"].fillna("").str.capitalize()
+    expected_cols = ["Nome", "Cognome", "Sesso", "Fascia", "Preferenze"]
+    missing_cols = [col for col in expected_cols if col not in df.columns]
+    if missing_cols:
+        st.error(f"Colonne mancanti nel file: {missing_cols}")
+        st.stop()
+
+    df["NomeCompleto"] = df["Nome"].astype(str).str.strip() + " " + df["Cognome"].astype(str).str.strip()
+    df["Preferenze"] = df["Preferenze"].fillna("").astype(str).str.strip()
+    df["Fascia"] = df["Fascia"].fillna("").astype(str).str.strip()
+    df["Sesso"] = df["Sesso"].fillna("").astype(str).str.capitalize()
 
     partecipanti = df["NomeCompleto"].tolist()
     nomi_validi = set(df["NomeCompleto"])
